@@ -78,6 +78,82 @@ class TestModels:
 
 
 # ---------------------------------------------------------------------------
+# Input validation tests
+# ---------------------------------------------------------------------------
+
+class TestInputValidation:
+    """Test the multi-layer input validation on TranscriptRequest."""
+
+    def test_valid_transcript_accepted(self):
+        req = TranscriptRequest(
+            transcript="Hi, this is John. I need to schedule an appointment."
+        )
+        assert req.transcript.startswith("Hi")
+
+    def test_too_short_rejected(self):
+        with pytest.raises(Exception, match="least"):
+            TranscriptRequest(transcript="Hi there")  # < 10 chars after min_length
+
+    def test_code_input_rejected(self):
+        code = """
+def calculate_total(items):
+    total = 0
+    for item in items:
+        total += item.price
+    return total
+
+class ShoppingCart:
+    def __init__(self):
+        self.items = []
+"""
+        with pytest.raises(Exception, match="code"):
+            TranscriptRequest(transcript=code)
+
+    def test_html_input_rejected(self):
+        html = """
+<div class="container">
+    <span>Hello</span>
+    <script>alert('xss')</script>
+</div>
+"""
+        with pytest.raises(Exception, match="code"):
+            TranscriptRequest(transcript=html)
+
+    def test_special_chars_rejected(self):
+        garbage = "!@#$%^&*(){}[]|\\/<>~`+=:;!@#$%^&*()"
+        with pytest.raises(Exception, match="natural language"):
+            TranscriptRequest(transcript=garbage)
+
+    def test_repetitive_spam_rejected(self):
+        spam = "Buy now. " * 20  # Same sentence repeated 20 times
+        with pytest.raises(Exception, match="repetition"):
+            TranscriptRequest(transcript=spam)
+
+    def test_few_words_rejected(self):
+        with pytest.raises(Exception):
+            TranscriptRequest(transcript="hello there")  # Only 2 words
+
+    def test_valid_multi_speaker_accepted(self):
+        transcript = (
+            "Receptionist: Good morning, City Health Clinic.\n"
+            "Caller: Hi, I need to reschedule my appointment.\n"
+            "Receptionist: Sure, what's your name?\n"
+            "Caller: It's James Park."
+        )
+        req = TranscriptRequest(transcript=transcript)
+        assert "James Park" in req.transcript
+
+    def test_transcript_with_numbers_accepted(self):
+        """Transcripts naturally contain phone numbers, dates, etc."""
+        transcript = (
+            "Hi, my name is Lisa Chen, born 05/15/1992. "
+            "My phone is 555-123-4567. I need to refill prescription #RX12345."
+        )
+        req = TranscriptRequest(transcript=transcript)
+        assert req.transcript == transcript
+
+
+# ---------------------------------------------------------------------------
 # Response parsing tests
 # ---------------------------------------------------------------------------
 
@@ -167,6 +243,6 @@ class TestAPI:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 "/analyze",
-                json={"transcript": "Some transcript"},
+                json={"transcript": "Hi, I need to schedule an appointment for next week please."},
             )
         assert response.status_code == 502

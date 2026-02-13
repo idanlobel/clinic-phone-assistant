@@ -1,0 +1,11 @@
+# Don't copy these into the Docker image
+.env
+.git
+.gitignore
+.pytest_cache
+__pycache__
+*.pyc
+tests/
+README.md
+Dockerfile
+.dockerignore
